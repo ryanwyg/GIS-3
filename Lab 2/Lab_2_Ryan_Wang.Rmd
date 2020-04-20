@@ -1,0 +1,257 @@
+---
+title: 'GIS 3 Lab 2'
+author: "Ryan (Yigong) Wang" 
+fontsize: 11pt
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+header-includes: \usepackage{pdfpages,amsmath,amssymb,float,amsfonts,enumitem,tcolorbox,bm,algorithm,fontspec,sansmath,fontenc,xcolor}
+  \setmainfont{Helvetica}
+geometry: margin=0.75in
+fig_crop: no
+
+---
+
+```{r setup, include=FALSE}
+library(sf)
+library(stringr) # for working with strings (pattern matching)
+library(tidyr) # for unite() and separate()
+library(openintro)
+library(raster)
+library(knitr)
+library(tidyverse)
+library(spData)
+library(dplyr)
+library(ggplot2)
+library(rgdal)
+library(ipumsr)
+library(ggthemes)
+library(scales)
+library(reshape2)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+options(width=70, digits=6, scipen=8)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+# Set R output size a bit smaller than default
+opts_chunk$set(size='small') 
+# Set the default to NOT display R code
+opts_chunk$set(echo=FALSE) 
+opts_chunk$set(warning=FALSE) 
+```
+
+This lab will practice skills learned in Chapters 3 and 4. In this lab, I will use a spatial dataset to explore the statistical and visualization features for attributes in the dataset available in R.
+
+The dataset I will assemble today is from the ACS public use data, curated by IPUMS from the University of Minnesota. (See "References" section at the end of this document for more information.)
+
+# 1. Creating the Spatial Dataset
+
+## The Non-spatial Part
+I assemble this dataset to prepare for some exploratory data analysis for aspects of work and earnings across different areas in the Chicago Metropolitan Area. I first customize a non-spatial dataset from IPUMS, selecting relevant earnings and work variables such as earnings from salary and wages, travel time to work, job types etc. See codebook for more details. I also select geographic variables (PUMA - our area unit, Metropolitan Area, and State) to help joining to a shapefile to make a spatial dataset. This dataset contains data from both 2017 and 2018.
+```{r}
+if (!require("ipumsr")) stop("Reading IPUMS data into R requires the ipumsr package. 
+                             It can be installed using the following command: 
+                             install.packages('ipumsr')")
+
+```
+
+```{r, echo=TRUE, results=FALSE}
+ddi <- read_ipums_ddi("/Users/ryan/Desktop/GIS 3/2017 2018 Work Geo/usa_00002.xml")
+data <- read_ipums_micro(ddi)
+```
+
+### a. Data Cleaning
+I clean the data by selecting out some irrelavant basic attributes, and apply a filter by selecting out people and households that have missing data for the attributes I am interested in (in this case earnings, household income, and house value), and limit the data to Chicago Metropolitan Area. 
+```{r, echo=TRUE}
+data$PUMA <- sprintf("%05d", data$PUMA)
+data_cleaned <- data %>% select(-SAMPLE , -GQ ) %>% 
+  filter(INCWAGE != 0 & INCWAGE != 999999 & INCWAGE != 999998 & MET2013 == 16980 & 
+           VALUEH != 0 & VALUEH != 9999999)
+```
+I am quite interested to see what the housing price distribution is in Chicago without a detailed area look (non-spatial). Below is a histogram of the housing prices under \$1m.
+```{r, fig.height=3, fig.width=6, fig.align='center'}
+hist(data_cleaned$VALUEH, main="histogram of house values from 0 - 1 million", xlab="price", ylab="number of houses", col=c ("violet", "Chocolate2"), xlim=c(0, 1000000), ylim=c(0, 10000), breaks=60)
+```
+
+I ran into a problem of selecting Chicago Metropolitan Area out of this large shape file of 2500+ PUMAs. In order to find all the PUMA area codes in the Chicago Metropolitan Areas, I had to print out the shape file and manually match the codes one by one to record. I did not know at the time that there is a crosswalk file on the IPUMS website listing out the specific PUMA codes for each metropolitan area. Below is a photo of the hand drawn and hand matched PUMA codes atlas (I had fun doing it though despite wasting time):
+```{r, out.width="300pt"}
+knitr::include_graphics("~/Downloads/IMG_6302.jpg")
+```
+
+With the crosswalk file, it became a lot easier to create a list of the PUMA codes that is in the Chicago Metropolitan Area. List created and imported into R. The output shows some of the codes and names of the PUMAs. (The codes are all five digits in original form, but for easier processing I converted them into numerical forms, hence some codes are not five digits due to first digits being zeroes.)
+```{r}
+PUMAcrosswalk <- read.csv("~/Desktop/Thesis/MSA2013_PUMA2010_crosswalk.csv")
+PUMAcrosswalk$PUMA.Code[1:3]
+PUMAcrosswalk$PUMA.Name[1:3]
+```
+
+### b. Aggregation - Weighted Average
+In order to join this non-spatial part of the data with the spatial part, we need to aggregate, and in this case, the "aggregation" is done by a weighted average to reflect the average value for each of the attributes in each PUMA.
+```{r, echo=TRUE}
+data_aggregated <- data_cleaned %>% group_by(PUMA) %>% summarize(VALUEH = weighted.mean(VALUEH, HHWT), 
+                                      INCWAGE = weighted.mean(INCWAGE, PERWT), 
+                                      HHINCOME = weighted.mean(HHINCOME, HHWT))
+```
+We then show the first couple of rows of this part of the dataset.
+```{r}
+head(data_aggregated)
+```
+
+\newpage
+## The Spatial Part
+
+### a. The Shape File
+I download a shape file of all US PUMA areas from the IPUMS website. A reference map could also be found from the Census Bureau. <https://www.census.gov/programs-surveys/geography/guidance/geo-areas/pumas.html>
+
+For the sake of time and convenience, I then created the shape file needed for this dataset by selecting the above PUMAs from the original whole US shape file in QGIS. Then I import this new shape file to be joined with the non-spatial part of the dataset.
+```{r, results=FALSE}
+CMA_p <- st_read("/Users/ryan/Desktop/Thesis/puma_cma/Chicago_Metro_Area.shp")
+```
+
+### b. Spatial Join
+I `left_join` the spatial and the non-spatial parts, and plot it (using household income) to see the result.
+```{r, results=FALSE, fig.height=2, fig.width=3}
+test <- left_join(CMA_p, data_aggregated)
+plot(test["HHINCOME"])
+```
+I find that one of the PUMAs is showing nothing in the plot. We run a little bit of code to determine whether it is the criteria in this dataset excludes this PUMA area from the metro area, or whether it is that there is just no data in this PUMA. 
+```{r, echo=TRUE, results=FALSE}
+filter(data_cleaned, PUMA == 00700)
+filter(data, PUMA == 00700 & STATEFIP == 18)
+```
+Both tests return a zero result! Turns out the surveyers of the Census Bureau just decided not to survey this area, hence it is not showing any data, even in the source file. We hence remove this area from the shape file to better visualize and represent the data.
+
+Plotting results again, and this time it looks normal.
+```{r, results=FALSE, fig.align='center', fig.height=3, fig.width=3}
+CMA <- st_read("~/Desktop/Thesis/Chicago Metro Area Fixed/Chicago_Metro_Area_Fixed.shp")
+finished <- left_join(CMA, data_aggregated)
+plot(finished["HHINCOME"])
+```
+
+\newpage
+# 2. Data Analysis
+
+## INCWAGE
+As metioned before, INCWAGE is the variable for salary/wage earnings for individual persons. 
+
+### Descriptive Statistics
+I first look at some summary statistics regarding this variable in the Chicago metropolitan area. 
+```{r}
+summary(finished$INCWAGE)
+```
+The median number is approximately 55997(dollars/year), which is not bad for a metropolis.
+
+### Distribution
+I want to look at how income level differes in different communities (PUMAs), and this histogram gives some general information. We find that incomes are in a left-skewed distribution, with most communities averaging between 40K and 60K a year. There are a couple of outliers on the right, which we will visualize in the mapping part.
+```{r, fig.height=2, fig.width=4}
+ggplot(finished, aes(INCWAGE, fill=State))+geom_histogram()+labs(title="histogram of salary/wage earnings across PUMAs in Chicago")
+```
+```{r, eval=FALSE}
+data_agg$SEX<-as.factor(data_agg$SEX)
+ggplot(data_agg, aes(x=SEX, y=INCWAGE))+geom_violin()
+```
+Before heading to the mapping part, I am also curious in how salary earnings differs across races. I use the non-spatial dataset to draw a violin plot to visualize how incomes are distributed for different race group. I also draw a bar-chart to see how many people are in each ethnicity group (the y-axis of this chart is using a log scale because white respondents are of overwhelming majority.)
+```{r}
+data_cleaned$RACE<- as.character(data_cleaned$RACE)
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "1", "White")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "2", "African American")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "3", "American Indian")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "4", "Chinese")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "5", "Japanese")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "6", "Other Asian/Pac Islander")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "7", "Other Race")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "8", "Two Major Races")
+data_cleaned$RACE <- replace(data_cleaned$RACE, data_cleaned$RACE == "9", "Three or More")
+```
+
+```{r, eval=FALSE, results=FALSE, fig.height=3, fig.width=9}
+g1 <- ggplot(data_cleaned, aes(x=RACE, y=INCWAGE, color=RACE))+geom_violin() + coord_cartesian(ylim = c(0, 150000))+stat_summary(fun=median, geom="point", size=2, color="red")+scale_fill_brewer(palette="RdBu") + scale_x_discrete(limits=c("White", "African American", "American Indian", "Chinese", "Japanese", "Other Asian/Pac Islander", "Other Race", "Two Major Races", "Three or More")) + theme_minimal() + labs(title = "violin plot of salaries for different races", subtitle = "(red dot is the median of each group)")+theme(legend.position = "none")
+
+g2 <- ggplot(data_cleaned, aes(x=RACE, fill=RACE))+geom_bar(stat="count")+scale_x_discrete(limits=c("White", "African American", "American Indian", "Chinese", "Japanese", "Other Asian/Pac Islander", "Other Race", "Two Major Races", "Three or More")) + scale_y_continuous(trans = "log10") + scale_fill_brewer(palette="Paired") + theme_minimal()+labs(title = "number of people in dataset categorized by RACE")+theme(legend.position = "none")
+
+grid.arrange(g1, g2, nrow = 1, top = textGrob("Exploratory Relationships Graphs between Race and Salary Income"))
+```
+```{r, out.width="525pt"}
+knitr::include_graphics("~/Downloads/000017.png")
+```
+As we can see, Chinese, Japanese and other Asian racies score very high in their salaries, and Whites are also in a leading position.
+
+## Mapping
+We then plot a chloropleth map showing the distrubution of INCWAGE across all PUMA areas. 
+```{r, fig.height=10, fig.width=15}
+ggplot(data=finished)+geom_sf(aes(fill = INCWAGE)) +
+    scale_fill_viridis_c(option = "cividis", trans = "sqrt")+ theme(panel.grid.minor=element_blank(),
+           panel.grid.major=element_blank(), axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+ggtitle("INCWAGE Map", subtitle = "(across Chicago Metro PUMAs)") +
+    theme(panel.background = element_rect(fill = "aliceblue"))
+```
+This plot shows average weighted salary income of each PUMA area, and it is intentionally big to show details regarding individual PUMAs. Turns out, near north side of Chicago and the northern suburbs (\textit{Evanston}, \textit{Glencoe} etc.) has very high salaryearnings, which exceeds $100K annulaly measured by the weighted average.
+
+```{r, eval=FALSE}
+# Something for next time.
+states <- st_read("/Users/ryan/Desktop/Thesis/Igismap/Alabama_AL4_US_Poly.shp")
+```
+```{r, eval=FALSE}
+# Something for next time.
+library(ggspatial)
+ggplot(data = ultimate) +
+    geom_sf(fill = "antiquewhite1") +
+    geom_sf(data = states, fill = NA) + 
+    geom_label(data = states, aes(X, Y, label = name), size = 5, fontface = "bold") +
+    scale_fill_viridis_c(trans = "sqrt", alpha = .4) +
+    annotation_scale(location = "bl", width_hint = 0.4) +
+    annotation_north_arrow(location = "bl", which_north = "true", 
+        pad_x = unit(0.75, "in"), pad_y = unit(0.5, "in"),
+        style = north_arrow_fancy_orienteering) +
+    coord_sf(xlim = c(-68, -78), ylim = c(33, 50), expand = FALSE) +
+    xlab("Longitude") + ylab("Latitude") +
+    ggtitle("Observation Sites", subtitle = "(2 sites in Palm Beach County, Florida)") +
+    theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+        size = 0.5), panel.background = element_rect(fill = "aliceblue"))
+```
+
+\newpage
+## Population
+The PUMA area is a specially designated area for the Census to provide as detailed geographical information as possible without compromising privacy of people who are surveyed. Each PUMA has at least 100K population. Out of curiosity, I want to see how many people are located in each PUMA in the Chicago Metropolitan Area. 
+```{r, include=FALSE, results=FALSE}
+PUMAcrosswalk <- mutate(PUMAcrosswalk, PUMA = sprintf("%05d", PUMAcrosswalk$PUMA.Code))
+ultimate <- left_join(finished, PUMAcrosswalk)
+```
+```{r}
+ggplot(data=ultimate)+geom_sf(aes(fill = PUMA.2010.Population)) +
+    scale_fill_viridis_c(option = "magma", trans = "sqrt")+ theme(panel.grid.minor=element_blank(),
+           panel.grid.major=element_blank(), axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+ggtitle("PUMA Population", subtitle = "2010 data") +
+    theme(panel.background = element_rect(fill = "thistle2"))
+```
+```{r, eval=FALSE, fig.align='center', fig.height=4}
+#grid.arrange(g3, g4, nrow = 1, top = textGrob("INCWAGE and Population across PUMA Areas"))
+```
+This plot shows that urban and downtown areas generally have higher population for each PUMA, but some suburban areas also have relatively high population for the PUMA, and this might be due to the PUMA boundary following the guidlines of counties, and they try not to separate counties, rusulting in suburban areas having larger areas for individual PUMA, hence containing more pupolation.
+
+For the following labs, I will try to explore more variables and potential relationships.
+
+\textit{(I am still figuring out how to get rid of some of the code outputs of ggplot graphics, and will try to make it look nicer for following labs assignments.)}
+
+\newpage
+# References
+The MET2013 variable in the IPUMS dataset for ACS contains information for the metropolitan areas.
+<https://usa.ipums.org/usa-action/variables/MET2013#description_section>
+
+IPUMS USA, University of Minnesota, www.ipums.org.
+
+Steven Ruggles, Sarah Flood, Ronald Goeken, Josiah Grover, Erin Meyer, Jose Pacas and Matthew Sobek. IPUMS USA: Version 10.0 [dataset]. Minneapolis, MN: IPUMS, 2020. <https://doi.org/10.18128/D010.V10.0>
+\newline
+\newline
+\begin{center}
+-END OF LAB 2-
+\end{center}
