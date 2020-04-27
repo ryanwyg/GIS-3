@@ -1,0 +1,237 @@
+---
+title: 'GIS 3 Lab 3'
+author: "Ryan (Yigong) Wang" 
+fontsize: 11pt
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+header-includes: \usepackage{pdfpages,amsmath,amssymb,float,amsfonts,enumitem,tcolorbox,bm,algorithm,fontspec,sansmath,fontenc,xcolor}
+  \setmainfont{Helvetica}
+geometry: margin=0.75in
+fig_crop: no
+
+---
+Work through the "Linking R to the Web (Links to an external site.)" lab by Singleton et al 2018, from their Urban Analytics text. The full lab is available as an Rmarkdown file or html file.  Go through as much as you can.
+
+Using what you've learned, generate an Rmarkdown file that uses an online dataset. Using data from the lab is fine, or you can find your own data. Load, extract, clean, and plot the data as a well-designed map. The file you generate should highlight key features throughout this process, and end with a carefully made map. It should be (at least slightly) different from the plots generated in the lab. Render your file as a pdf and/or html, publish on your Github, and link here.
+
+Note:
+
+following the premise of the lab, the data you use \textbf{should be linked directly from the Web} not loaded in as a CSV file from your system
+if you develop an html file, please include the exact link to the html file on your Github. It makes it slightly easier for grading purposes. Thanks!
+```{r setup, include=FALSE}
+library(sf)
+library(stringr) # for working with strings (pattern matching)
+library(tidyr) # for unite() and separate()
+library(openintro)
+library(raster)
+library(knitr)
+library(tidyverse)
+library(spData)
+library(dplyr)
+library(ggplot2)
+library(rgdal)
+library(ipumsr)
+library(ggthemes)
+library(scales)
+library(reshape2)
+library(RColorBrewer)
+library(grid)
+library(gridExtra)
+library(lubridate)
+library(tmap)
+library(pdftools)
+library(RSocrata)
+library(rjson)
+options(width=70, digits=6, scipen=8)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+# Set R output size a bit smaller than default
+opts_chunk$set(size='small') 
+# Set the default to NOT display R code
+opts_chunk$set(echo=FALSE) 
+opts_chunk$set(warning=FALSE) 
+```
+
+This lab will practice skills learned in Chapters 5. In this lab, I will use a spatial dataset directly linked from the web to do some spatial analyses. 
+
+For this assignment, I will look at the film permits of the City of Chicago and see what the most filmed places in this city are. First, we download the dataset from the Chicago open data portal:
+```{r}
+socrata.file <- "https://data.cityofchicago.org/resource/c2az-nhru.json"
+```
+# Data Preparation
+
+This dataset descirbes applications to the Chicago Department of Transportation for permits under its juridiction where the work type is "Fliming." This should give us a good comprehensive look at where the filming locations are distributed. The time period of this dataset is from 2015 - current (Oct 2019.)
+
+Next up we extract the useful portion of this dataset. For this assignment, we want to look at all the film permits in 2018, and we select all the values where the APPLICATIONSTARTDATE is in 2018.
+```{r, include=FALSE}
+film.data <- read.socrata(socrata.file)
+film.2018 <- film.data %>% filter(year(applicationstartdate) == 2018)
+film.2018$totalfees <- as.numeric(film.2018$totalfees)
+film.2018$location.latitude <- as.numeric(film.2018$location.latitude)
+film.2018$location.longitude <- as.numeric(film.2018$location.longitude)
+# dim(film.2018)
+```
+It is lucky that we do not have any unrecorded location data points, so we do not need to select out any incomplete data entries. We then select the variables needed (\textbf{totalfees}, \textbf{location.latitude}, and \textbf{location.longitude}.)
+```{r, include=FALSE}
+film.final <- film.2018 %>% select(fee = totalfees,
+                          lat = location.latitude, lon = location.longitude)
+summary(film.2018$totalfees)
+library(ggplot2)
+# Basic scatter plot
+ggplot(film.2018, aes(x=film.2018$applicationnumber, y=film.2018$totalfees)) + geom_point()
+```
+
+
+We then create a point layer (I add the "TOTALFEES" attribute as I want to see if there are geographical diffrences in the fees charged for film permits):
+
+
+```{r, echo=FALSE}
+film.coord <- film.final %>% filter(!(is.na(lat))) %>% filter(!(is.na(lon)))
+film.points = st_as_sf(film.coord, coords = c("lon", "lat"), crs = 4326, agr = "constant")
+plot(film.points, main = "Fees for 2018 Chicago Filming Permits")
+```
+
+
+From this point map, we can see that the downtown and central areas are very densely filled with filming applications. Note that the fees turn out to be mostly minimal with only a couple of high numbers. (We also have about 10% missing values as those are mostly waived fee events (583 out of 5620 observations do not have fee data.)) Hence this attribute is not significant. A quick stats summary also confirms this point.
+
+```{r, echo=FALSE}
+summary(film.2018$totalfees)
+```
+
+# Community Area Data
+Next up we can add the community area attribute to our dataset by getting the community area information from the following source, and we will then spatial join this community boundary to our location information in our selected 2018 data.:
+```{r}
+comm.file <- "https://data.cityofchicago.org/resource/igwz-8jzy.geojson"
+```
+
+```{r, include=FALSE}
+chicago.comm <- read_sf(comm.file)
+class(chicago.comm)
+st_crs(chicago.comm)
+plot(chicago.comm)
+# head(chicago.comm)
+
+chicago.comm <- st_transform(chicago.comm,32616)
+st_crs(chicago.comm)
+
+film.points <- st_transform(film.points,32616)
+st_crs(film.points)
+```
+
+```{r, include=FALSE}
+comm.pts <- st_join(film.points,chicago.comm["area_num_1"])
+# head(comm.pts)
+
+comm.pts$area_num_1 <- as.integer(comm.pts$area_num_1)
+is.integer(comm.pts$area_num_1)
+
+chicago.comm$area_num_1 <- as.integer(chicago.comm$area_num_1)
+```
+
+```{r, include=FALSE}
+st_geometry(comm.pts) <- NULL
+class(comm.pts)
+
+film.cnts <- comm.pts %>% count(area_num_1)
+# head(film.cnts)
+
+film.cnts <- film.cnts %>% rename(comm = area_num_1, AGG.COUNT = n)
+# head(film.cnts)
+```
+
+
+```{r, include=FALSE}
+chicago.comm <- left_join(chicago.comm, film.cnts, by = c("area_num_1" = "comm"))
+# head(chicago.comm)
+
+tm_shape(chicago.comm) +
+  tm_polygons("AGG.COUNT")
+```
+
+At this point, we can do a choropleth map showng the number of filming permits in each comunity areas. I am also interested in adjusting this data keeping the community area population number in mind (we will calculate the filming permits per 1000 people in each community area,) and here we use the data from the 2010 census: 
+
+```{r}
+pdf.file <- "https://www.cityofchicago.org/content/dam/city/depts/zlup/Zoning_Main_Page/Publications/Census_2010_Community_Area_Profiles/Census_2010_and_2000_CA_Populations.pdf"
+```
+
+```{r, include=FALSE}
+pop.dat <- pdf_text(pdf.file)
+class(pop.dat)
+length(pop.dat)
+## Parsing the PDF file
+length(pop.dat[[1]])
+
+nnlist <- ""
+nnlist
+
+ppage <- strsplit(pop.dat[[1]],split="\n")
+ppage[[1]]
+
+nni <- ppage[[1]]
+nni <- nni[-(1:4)]
+nni
+
+nnlist <- ""
+for (i in 1:2) {
+  ppage <- strsplit(pop.dat[[i]],split="\n")
+  nni <- ppage[[1]]
+  nni <- nni[-(1:4)]
+  nnu <- unlist(nni)
+  nnlist <- c(nnlist,nnu)
+}
+
+nnlist
+
+nnlist <- nnlist[2:(length(nnlist)-1)]
+```
+
+
+```{r, include=FALSE}
+nnpop <- vector(mode="numeric",length=length(nnlist))
+
+for (i in (1:length(nnlist))) {
+     popchar <- substr(nnlist[i],start=27,stop=39)
+     popval <- as.numeric(gsub(",","",popchar))
+     nnpop[i] <- popval
+}
+nnpop
+
+#Next, we create a data frame with populatio values
+nnid <- (1:length(nnlist))
+nnid
+
+neighpop <- data.frame(as.integer(nnid),nnpop)
+names(neighpop) <- c("NID","POP2010")
+# head(neighpop)
+```
+We will then parse this PDF file to gather the community area population data, and then calculate the required statistic (filming permits per 1000 people.) Finally, we can update our map with regards to this population information. We now get the number of filming permits per 1000 people (the map on the left is generated with data not adjusted with population number, and the right one is adjusted):
+
+```{r, echo=FALSE}
+#First, we compute the filming per capita.
+chicago.comm <- left_join(chicago.comm,neighpop, by = c("area_num_1" = "NID"))
+# head(chicago.comm)
+
+#We then create a new variable using the tidtverse mutate command as the ratio of filming permits per 1000 population.
+chicago.comm <- chicago.comm %>% mutate(filmpcap = (AGG.COUNT / POP2010) * 1000) 
+# head(chicago.comm)
+
+#We then could plot our final choropleth map:
+tm_shape(chicago.comm) +
+  tm_polygons("AGG.COUNT", title="Filming Permits by Community Area")
+tm_shape(chicago.comm) +
+  tm_polygons("filmpcap", title="Filming Permits by Community Area (# per 1000 people)")
+```
+
+
+
+
+
+# Discussion
+In this assignment, we plot a point map, and two choropleth maps using the Chicago filming permit data. From the results, we can see that the areas with the most filming is the central area of Chicago (Loop, Near North Side, Near West Side, and North Lawndale being the most filmed in terms of numbers, with Near West Side topping the chart.) When we adjust this data with population number, we see that the Loop now stands out as the most popular place for filming, which makes sense. Near West Side is still popular despite being surpassed by the loop. We can also see that some communities have missing informaition, and one paculiar example is O'Hare, as the airport in intuition should receive some amounts of filming. I suspect this might be due to the information source. This data set is from the Department of Transportation, and O'Hare is an airport, which might not be under the jurisdiction of such administration (It might be the FAA or the airport administration itself.)  Overall, we can visualize the filming popularity in Chicago in a clear and concise manner through this method.
