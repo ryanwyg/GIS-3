@@ -10,6 +10,10 @@ output:
   word_document: default
 header-includes: \usepackage{pdfpages,amsmath,amssymb,float,amsfonts,enumitem,tcolorbox,bm,algorithm,fontspec,sansmath,fontenc,xcolor,scrextend}
   \setmainfont{Gotham}
+<<<<<<< HEAD
+=======
+  \setlength\parindent{24pt}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 geometry: margin=0.75in
 fig_crop: no
 
@@ -34,7 +38,10 @@ library(reshape2)
 library(RColorBrewer)
 library(grid)
 library(gridExtra)
+<<<<<<< HEAD
 library(extrafont)
+=======
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 options(width=70, digits=6, scipen=8)
 def.chunk.hook  <- knitr::knit_hooks$get("chunk")
 knitr::knit_hooks$set(chunk = function(x, options) {
@@ -46,7 +53,10 @@ opts_chunk$set(size='small')
 # Set the default to NOT display R code
 opts_chunk$set(echo=TRUE) 
 opts_chunk$set(warning=FALSE) 
+<<<<<<< HEAD
 loadfonts()
+=======
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 ```
 
 # Introduction
@@ -69,7 +79,11 @@ trips <- read.csv("./data/201608_trip_data.csv")
 ```
 Each of the stations has various attributes and cover a series of locations within the bay area - in this case, we will subset to only those within San Francisco.
 
+<<<<<<< HEAD
 ```{r include=FALSE}
+=======
+```{r}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 head(stations)
 ```
 Since we are exploring the Silicon valley data, we select the relevant portion:
@@ -81,18 +95,29 @@ stations <- stations[stations$landmark != "San Francisco",]
 library(ggmap)
 ```
 
+<<<<<<< HEAD
 ## Finding the Correct Map Area
 Now we plot maps to show the locations of all the bike share stations in the Silicon Valley:
+=======
+Now we plot a map to show the locations of all the bike share stations in the Silicon Valley:
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 ```{r}
 #Get background map for Silicon Valley
 register_google(key = "AIzaSyDJGbhjT7t8E4pb0Zu49Ludj4hg4wt1_mQ")
 valley <- get_map(location = c(-122.054, 37.371), zoom = 11,color = 'bw')
 SJ <- get_map(location = c(-121.889, 37.335), zoom = 14,color = 'color')
+<<<<<<< HEAD
 tech <- get_map(location = c(-122.107, 37.410), zoom = 12,color = 'color')
 
 #Basic point plot
 ggmap(valley) + geom_point(shape=17, size = 2, data = stations, aes(x = long, y = lat, colour = "red")) + 
 theme_bw() + ggtitle("Bike Stations in Silicon Valley") +
+=======
+
+#Basic point plot
+ggmap(valley) + geom_point(shape=17, size = 2, data = stations, aes(x = long, y = lat, colour = "red")) + 
+theme_bw() + ggtitle("Bike States in Silicon Valley") +
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 theme(axis.line = element_blank(),
       axis.text = element_blank(),
       axis.title=element_blank(),
@@ -116,6 +141,7 @@ theme(axis.line = element_blank(),
       panel.grid.minor = element_blank(),
       panel.border = element_blank(),
       panel.background = element_blank())
+<<<<<<< HEAD
 
 ggmap(tech) + geom_point(shape=19, size = 2, data = stations, aes(x = long, y = lat, colour = "red")) + 
 theme_bw() + ggtitle("Bike Stations in Palo Alto + Mountain View") +
@@ -138,6 +164,16 @@ We need three maps because the Silicon Valley stations are clustered into three 
 head(trips)
 ```
 ```{r include=FALSE}
+=======
+```
+Turning now to the trips taken between these origin and destinations, these are ordered within the data frame as a trip per row, with each trip giving a various details including the start and end terminals. Using these data we will create a table of aggregate origin destination flows - however, we will only consider those flows between the stations identified as "San Francisco" and therefore shown on the map above.
+
+```{r}
+# View top six rows of the trips data
+head(trips)
+```
+```{r}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 # Get a list of the station IDs within Silicon Valley
 s_SV <- unique(stations$station_id)
 
@@ -150,7 +186,11 @@ OD_trips_SV <- table(trips_SV$Start.Terminal,trips_SV$End.Terminal)
 head(OD_trips_SV)
 ```
 
+<<<<<<< HEAD
 We then create a dataframe with all stations in the Silicon Valley
+=======
+
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 ```{r}
 # Create a data frame of the OD pairs
 OD_trips_SV_Narrow <- data.frame(OD_trips_SV)
@@ -158,9 +198,15 @@ OD_trips_SV_Narrow <- data.frame(OD_trips_SV)
 colnames(OD_trips_SV_Narrow) <- c("Origin","Destination","Trips")
 ```
 
+<<<<<<< HEAD
 We will now identify the top ten most frequently ridden origin-destination pairs:
 
 ```{r results='hide'}
+=======
+We will now identify the top ten most frequently ridden origin-destination pairs
+
+```{r}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 # Sorts the trips in decending order
 OD_trips_SV_Narrow <- OD_trips_SV_Narrow[order(OD_trips_SV_Narrow$Trips,decreasing = TRUE),]
 # Get the top 10 trips
@@ -191,7 +237,11 @@ colnames(top10) <- c("Origin","Destination","Trips","O_lat","O_long","D_lat","D_
 
 One of the simplest ways of calculating a route is to use the Google maps API which is implemented in the googleway package.
 
+<<<<<<< HEAD
 ```{r include=FALSE}
+=======
+```{r eval=FALSE}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 # Install package
 #install.packages("googleway")
 ```
@@ -199,11 +249,19 @@ One of the simplest ways of calculating a route is to use the Google maps API wh
 # Load package
 library(googleway)
 ```
+<<<<<<< HEAD
 ```{r include=FALSE}
 #key <- "AIzaSyD5YyiOC01UDHRJvpgPE41ar19wqa9ZXAc"
 ```
 
 For this we will need to get a [Google maps API](https://developers.google.com/maps/documentation/directions/) key:
+=======
+```{r echo=FALSE}
+#key <- "AIzaSyD5YyiOC01UDHRJvpgPE41ar19wqa9ZXAc"
+```
+
+For this you will need to get a [Google maps API](https://developers.google.com/maps/documentation/directions/) key:
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 
 ```{r}
 # Set your key
@@ -212,7 +270,11 @@ key <- "AIzaSyDJGbhjT7t8E4pb0Zu49Ludj4hg4wt1_mQ"
 
 We will then extract an origin destination pair from our top10 object, and then use the google_directions() function to generate a route - this is then converted to a set of lat lon waypoints using decode_pl():
 
+<<<<<<< HEAD
 ```{r, results='hide'}
+=======
+```{r}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 # Using the first origin/destination
 x <- 2 # You can change this between 1 - 10 to view each of the routes
 origin <- c(top10[x,"O_lat"],top10[x,"O_long"])
@@ -274,6 +336,7 @@ We can now visualize this using the ID as a factor which shows each route as a s
 ggmap(valley) +
   geom_path(aes(x = lon, y = lat,color = as.factor(ID)), size = 0.5, data = tmp, lineend = "round")
 ```
+<<<<<<< HEAD
 \textbf{As we can see, the top ten most frequented trips are taken in all three cities, not just San Jose.}
 \newpage
 
@@ -281,11 +344,21 @@ ggmap(valley) +
 To enable some more experimentation with the flow data visualization without having to generate all the potential routes yourself, we have run these already for all origin destination station pairs where the flow was greater than 0. We will load these now:
 
 ```{r echo = TRUE, eval = FALSE}
+=======
+
+To enable some more experimentation with the flow data visualization without having to generate all the potential routes yourself, we have run these already for all origin destination station pairs where the flow was greater than 0. We will load these now:
+
+```{r echo = FALSE, eval = FALSE}
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 
 # Create a list of all flows greater than 0 and within Silicon Valley
 ALL <- OD_trips_SV_Narrow[(OD_trips_SV_Narrow$Origin %in% s_SV) | (OD_trips_SV_Narrow$Destination %in% s_SV),]
 ALL <- ALL[ALL$Trips > 0,]
+<<<<<<< HEAD
 ALL <- ALL[ALL$Origin != ALL$Destination,]
+=======
+#ALL <- ALL[ALL$Origin != ALL$Destination,]
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 ALL$ID <- 1:nrow(ALL)
 
 # Add origin co-ordinates
@@ -334,6 +407,7 @@ All_Flows <- tmp_all
 
 save(All_Flows,file="All_Flows.Rdata")
 ```
+<<<<<<< HEAD
 There are in total 446 pairs of stations that have routes to be generated, and we generate routes between each of them and collect trip data between these station pairs.
 
 ```{r, results='hide'}
@@ -346,6 +420,17 @@ load("./data/All_Flows.Rdata")
 
 ## Visualizing the trips
 We can now show these on a map - we use the group option within the aes to tell ggmap that these are id that separate the routes, otherwise the whole set of co-ordinates are interpreted as a single route. We can remove these and generate the plot again to see what happens. 
+=======
+
+```{r}
+# Load flows
+load("./data/All_Flows.Rdata")
+# Show the top six rows of the table
+head(All_Flows)
+```
+
+We can now show these on a map - we use the group option within the aes to tell ggmap that these are id that separate the routes, otherwise the whole set of co-ordinates are interpreted as a single route. You can remove these and generate the plot again to see what happens. 
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
 
 ```{r}
 ggmap(valley) +
@@ -355,6 +440,7 @@ ggmap(valley) +
 We can now use the trip information to adjust the plot - for example, to scale the routes by the flow volume. We add the size option, but also divide the flows by 1000 to make the line widths an acceptable size. Thicker lines represent greater flows. We have also added the location of the stations in red.
 
 ```{r}
+<<<<<<< HEAD
 ggmap(valley,darken = 0.75) +
   geom_path(aes(x = lon, y = lat, group = ID), data = All_Flows, size = All_Flows$Trips/500, colour = "white") +
   geom_point(data=stations, aes(long, lat),colour="red") +
@@ -425,12 +511,51 @@ ggmap(tech,darken = 0.75) +
   geom_point(data=stations, aes(long, lat),colour="red") +
   geom_text(data = stations,aes(x = long, y = lat, label = station_id), check_overlap = TRUE, colour="#FFFFFF",hjust=-0.5) +
   ggtitle("Palo Alto + Mountain View") +
+=======
+ggmap(valley) +
+  geom_path(aes(x = lon, y = lat, group = ID), data = All_Flows,size = All_Flows$Trips/1000) +
+  geom_point(data=stations, aes(long, lat),colour="red")
+```
+
+There are a lot of other adjustment options, for example, we can darken the map and change the line color:
+
+```{r}
+ggmap(valley,darken = 0.8) +
+  geom_path(aes(x = lon, y = lat, group = ID), data = All_Flows, size = All_Flows$Trips/500, colour = "white") +
+  geom_point(data=stations, aes(long, lat),colour="red")
+
+```
+
+Or color the lines by intensity of flow; plus, we have also added some labels for the station ID using geom_text():
+
+
+```{r}
+ggmap(valley,darken = 0.8) +
+  geom_path(aes(x = lon, y = lat, group = ID,colour = All_Flows$Trips), data = All_Flows, size = All_Flows$Trips/1000) +
+  scale_colour_gradient(low="#900C3F", high="#FFC300") +
+  geom_point(data=stations, aes(long, lat),colour="red") +
+  geom_text(data = stations,aes(x = long, y = lat, label = station_id), check_overlap = TRUE, colour="#FFFFFF",hjust=-0.6)
+
+```
+
+We will now clean up this plot by removing the unwanted elements and changing the title of the legend:
+
+```{r}
+ggmap(valley,darken = 0.8) +
+  geom_path(aes(x = lon, y = lat, group = ID,colour = All_Flows$Trips), data = All_Flows, size = All_Flows$Trips/1000) +
+  scale_colour_gradient(low="#900C3F", high="#FFC300",name="Trips") +
+  geom_point(data=stations, aes(long, lat),colour="red") +
+  geom_text(data = stations,aes(x = long, y = lat, label = station_id), check_overlap = TRUE, colour="#FFFFFF",hjust=-0.6) +
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
   theme (
 		axis.text = element_blank (), 
 		axis.title = element_blank (),
 		axis.ticks = element_blank ()
 		)
 ```
+<<<<<<< HEAD
 
 # Conclusion
 From the above traffic flow analyses, we can conclude that outside of San Francisco, for the rest of the Bay Area, the bikesharing program is also interesting for analyses. There are two city-level clusters: San Jose, Mountain View + Palo Alto. The trips are mostly within the clusters and the bike stations are located in the centers of the city, and near major tech company campuses. Traffic flows are also the most significant near tech comapnies and on main boulevards. Due to the more flat nature in south bay, the bike routes are actually more direct between stations.
+=======
+>>>>>>> 58fc75031deb0b140716402cb7c5524f1bc56516
